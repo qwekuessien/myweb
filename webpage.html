@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1639,7 +1638,7 @@
 
     <script>
         // ============================================================
-        // THREE.JS GLOBE — Always rotating + subtle shadow
+        // THREE.JS GLOBE — Always rotating + subtle shadow + arrows
         // ============================================================
         (function() {
             const container = document.getElementById('hero-canvas-container');
@@ -1774,6 +1773,55 @@
             ground.receiveShadow = true;
             globeGroup.add(ground);
 
+            // --- ARROWS (subtle movement) ---
+            const arrowGroup = new THREE.Group();
+            globeGroup.add(arrowGroup);
+
+            // Create a single arrow mesh (cone + cylinder) pointing +Z
+            function createArrow() {
+                const group = new THREE.Group();
+
+                // Shaft
+                const shaftGeo = new THREE.CylinderGeometry(0.015, 0.015, 0.12, 6);
+                const shaftMat = new THREE.MeshBasicMaterial({
+                    color: 0x2EBA72,
+                    transparent: true,
+                    opacity: 0.2,
+                });
+                const shaft = new THREE.Mesh(shaftGeo, shaftMat);
+                shaft.position.z = 0.06;
+                group.add(shaft);
+
+                // Cone head
+                const headGeo = new THREE.ConeGeometry(0.04, 0.08, 6);
+                const headMat = new THREE.MeshBasicMaterial({
+                    color: 0x2EBA72,
+                    transparent: true,
+                    opacity: 0.25,
+                });
+                const head = new THREE.Mesh(headGeo, headMat);
+                head.position.z = 0.14;
+                group.add(head);
+
+                return group;
+            }
+
+            const numArrows = 16;
+            const radius = 1.85;
+            for (let i = 0; i < numArrows; i++) {
+                const angle = (i / numArrows) * Math.PI * 2;
+                const arrow = createArrow();
+                // Position on circle in XZ plane
+                arrow.position.x = radius * Math.cos(angle);
+                arrow.position.z = radius * Math.sin(angle);
+                // Rotate to point along tangent (perpendicular to radius, in XZ plane)
+                // Tangent direction: (-sin(angle), 0, cos(angle))
+                // We want arrow's +Z to point that way
+                const tangent = new THREE.Vector3(-Math.sin(angle), 0, Math.cos(angle));
+                arrow.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), tangent);
+                arrowGroup.add(arrow);
+            }
+
             // --- LIGHTS ---
             // Ambient fill
             const ambient = new THREE.AmbientLight(0x404040, 0.7);
@@ -1844,8 +1892,11 @@
             function animate() {
                 requestAnimationFrame(animate);
 
-                // Always rotate — no conditional
+                // Always rotate globe
                 globeGroup.rotation.y += 0.004;
+
+                // Rotate arrow group independently (slightly faster to create movement)
+                arrowGroup.rotation.y += 0.008;
 
                 // Parallax offset (gentle)
                 targetRotX += (mouseX - targetRotX) * 0.04;
