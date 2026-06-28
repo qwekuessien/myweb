@@ -1638,7 +1638,7 @@
 
     <script>
         // ============================================================
-        // THREE.JS GLOBE — Always rotating + subtle shadow + arrows
+        // THREE.JS GLOBE — Always rotating + subtle shadow + satellites
         // ============================================================
         (function() {
             const container = document.getElementById('hero-canvas-container');
@@ -1773,53 +1773,103 @@
             ground.receiveShadow = true;
             globeGroup.add(ground);
 
-            // --- ARROWS (subtle movement) ---
-            const arrowGroup = new THREE.Group();
-            globeGroup.add(arrowGroup);
+            // --- SATELLITES (replacing arrows) ---
+            const satelliteGroup = new THREE.Group();
+            globeGroup.add(satelliteGroup);
 
-            // Create a single arrow mesh (cone + cylinder) pointing +Z
-            function createArrow() {
+            // Create a satellite mesh
+            function createSatellite() {
                 const group = new THREE.Group();
 
-                // Shaft
-                const shaftGeo = new THREE.CylinderGeometry(0.015, 0.015, 0.12, 6);
-                const shaftMat = new THREE.MeshBasicMaterial({
+                // Main body (small box)
+                const bodyGeo = new THREE.BoxGeometry(0.06, 0.04, 0.06);
+                const bodyMat = new THREE.MeshBasicMaterial({
                     color: 0x2EBA72,
+                    transparent: true,
+                    opacity: 0.55,
+                });
+                const body = new THREE.Mesh(bodyGeo, bodyMat);
+                group.add(body);
+
+                // Solar panels (two thin rectangles)
+                const panelMat = new THREE.MeshBasicMaterial({
+                    color: 0x4CDE8A,
                     transparent: true,
                     opacity: 0.2,
+                    side: THREE.DoubleSide,
                 });
-                const shaft = new THREE.Mesh(shaftGeo, shaftMat);
-                shaft.position.z = 0.06;
-                group.add(shaft);
 
-                // Cone head
-                const headGeo = new THREE.ConeGeometry(0.04, 0.08, 6);
-                const headMat = new THREE.MeshBasicMaterial({
+                // Left panel
+                const panelGeo = new THREE.BoxGeometry(0.09, 0.002, 0.035);
+                const leftPanel = new THREE.Mesh(panelGeo, panelMat);
+                leftPanel.position.x = -0.075;
+                group.add(leftPanel);
+
+                // Right panel
+                const rightPanel = new THREE.Mesh(panelGeo, panelMat);
+                rightPanel.position.x = 0.075;
+                group.add(rightPanel);
+
+                // Small antenna (tiny sphere or cylinder)
+                const antGeo = new THREE.CylinderGeometry(0.004, 0.006, 0.02, 4);
+                const antMat = new THREE.MeshBasicMaterial({
                     color: 0x2EBA72,
                     transparent: true,
-                    opacity: 0.25,
+                    opacity: 0.3,
                 });
-                const head = new THREE.Mesh(headGeo, headMat);
-                head.position.z = 0.14;
-                group.add(head);
+                const ant = new THREE.Mesh(antGeo, antMat);
+                ant.position.z = 0.045;
+                ant.rotation.x = 0.2;
+                group.add(ant);
+
+                // Glow dot on body
+                const glowDotGeo = new THREE.SphereGeometry(0.01, 6, 6);
+                const glowDotMat = new THREE.MeshBasicMaterial({
+                    color: 0x4CDE8A,
+                    transparent: true,
+                    opacity: 0.6,
+                });
+                const glowDot = new THREE.Mesh(glowDotGeo, glowDotMat);
+                glowDot.position.z = 0.035;
+                group.add(glowDot);
 
                 return group;
             }
 
-            const numArrows = 16;
-            const radius = 1.85;
-            for (let i = 0; i < numArrows; i++) {
-                const angle = (i / numArrows) * Math.PI * 2;
-                const arrow = createArrow();
-                // Position on circle in XZ plane
-                arrow.position.x = radius * Math.cos(angle);
-                arrow.position.z = radius * Math.sin(angle);
-                // Rotate to point along tangent (perpendicular to radius, in XZ plane)
-                // Tangent direction: (-sin(angle), 0, cos(angle))
-                // We want arrow's +Z to point that way
-                const tangent = new THREE.Vector3(-Math.sin(angle), 0, Math.cos(angle));
-                arrow.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), tangent);
-                arrowGroup.add(arrow);
+            const numSatellites = 8;
+            const orbitRadius = 1.95;
+
+            // Store satellites with their individual orbit parameters
+            const satellites = [];
+
+            for (let i = 0; i < numSatellites; i++) {
+                const sat = createSatellite();
+
+                // Different orbital inclinations (mix of equatorial and inclined)
+                const inclination = (i / numSatellites) * Math.PI * 0.6 + 0.2;
+                const startAngle = (i / numSatellites) * Math.PI * 2;
+
+                // Position on an inclined orbit
+                const x = orbitRadius * Math.cos(startAngle);
+                const z = orbitRadius * Math.sin(startAngle) * Math.cos(inclination);
+                const y = orbitRadius * Math.sin(startAngle) * Math.sin(inclination);
+
+                sat.position.set(x, y, z);
+
+                // Store orbit data
+                sat.userData = {
+                    angle: startAngle,
+                    inclination: inclination,
+                    radius: orbitRadius,
+                    speed: 0.004 + (i % 3) * 0.0015, // slightly different speeds
+                    tilt: (i / numSatellites) * Math.PI * 0.3,
+                };
+
+                // Orient the satellite to face its direction of travel
+                // We'll update this in the animation loop
+
+                satelliteGroup.add(sat);
+                satellites.push(sat);
             }
 
             // --- LIGHTS ---
@@ -1895,8 +1945,43 @@
                 // Always rotate globe
                 globeGroup.rotation.y += 0.004;
 
-                // Rotate arrow group independently (slightly faster to create movement)
-                arrowGroup.rotation.y += 0.008;
+                // Update satellite positions (orbit)
+                satellites.forEach(function(sat) {
+                    const data = sat.userData;
+                    // Advance angle
+                    data.angle += data.speed;
+
+                    // Compute new position on inclined orbit
+                    const x = data.radius * Math.cos(data.angle);
+                    const z = data.radius * Math.sin(data.angle) * Math.cos(data.inclination);
+                    const y = data.radius * Math.sin(data.angle) * Math.sin(data.inclination);
+
+                    sat.position.set(x, y, z);
+
+                    // Orient satellite: look in direction of travel (tangent)
+                    // Compute tangent vector (derivative of position)
+                    const dx = -data.radius * Math.sin(data.angle);
+                    const dz = data.radius * Math.cos(data.angle) * Math.cos(data.inclination);
+                    const dy = data.radius * Math.cos(data.angle) * Math.sin(data.inclination);
+                    const tangent = new THREE.Vector3(dx, dy, dz).normalize();
+
+                    // The satellite's local +Z should point along the tangent
+                    const up = new THREE.Vector3(0, 1, 0);
+                    // If tangent is parallel to up, use a different up vector
+                    if (Math.abs(tangent.dot(up)) > 0.99) {
+                        up.set(1, 0, 0);
+                    }
+                    const quat = new THREE.Quaternion().setFromUnitVectors(
+                        new THREE.Vector3(0, 0, 1),
+                        tangent
+                    );
+                    sat.quaternion.copy(quat);
+
+                    // Slight wobble (add a small rotation around the tangent)
+                    const wobble = Math.sin(data.angle * 2) * 0.03;
+                    const wobbleQuat = new THREE.Quaternion().setFromAxisAngle(tangent, wobble);
+                    sat.quaternion.multiply(wobbleQuat);
+                });
 
                 // Parallax offset (gentle)
                 targetRotX += (mouseX - targetRotX) * 0.04;
